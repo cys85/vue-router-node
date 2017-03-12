@@ -61,14 +61,14 @@ const app = new Vue({
         <th>$route.params</th>
     </tr>
     <tr>
-        <th>/user/:username</th>
-        <th>/user/evan </th>
-        <th>{ username: 'evan' }</th>
+        <td>/user/:username</td>
+        <td>/user/evan </td>
+        <td>{ username: 'evan' }</td>
     </tr>
     <tr>
-        <th>/user/:username/post/:post_id</th>
-        <th>/user/evan/post/123</th>
-        <th>{ username: 'evan', post_id: 123 }</th>
+        <td>/user/:username/post/:post_id</td>
+        <td>/user/evan/post/123</td>
+        <td>{ username: 'evan', post_id: 123 }</td>
     </tr>
 </table>
 
