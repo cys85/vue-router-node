@@ -110,3 +110,49 @@ const User = {
 
 ### 匹配的优先级
 谁先定义的，谁的优先级就最高。
+
+## 嵌套路由
+```javascript
+
+<div id="app">
+  <router-view></router-view>
+</div>
+
+const User = {
+  template: `
+    <div class="user">
+      <h2>User {{ $route.params.id }}</h2>
+      <router-view></router-view>
+    </div>
+  `
+}
+
+const router = new VueRouter({
+  routes: [
+    { path: '/user/:id', component: User,
+      children: [
+        {
+          // 当 /user/:id 匹配成功，
+          // UserHome 会被渲染在 User 的 <router-view> 中 
+          path: '', 
+          component: UserHome 
+        },
+        {
+          // 当 /user/:id/profile 匹配成功，
+          // UserProfile 会被渲染在 User 的 <router-view> 中
+          path: 'profile',
+          component: UserProfile
+        },
+        {
+          // 当 /user/:id/posts 匹配成功
+          // UserPosts 会被渲染在 User 的 <router-view> 中
+          path: 'posts',
+          component: UserPosts
+        }
+      ]
+    }
+  ]
+})
+
+```
+注意：以 / 开头的嵌套路径会被当作根路径。 
