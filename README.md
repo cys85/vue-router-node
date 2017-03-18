@@ -12,6 +12,11 @@
   - [全局钩子](#全局钩子)
   - [某个路由独享的钩子](#某个路由独享的钩子)
   - [组件内的钩子](#组件内的钩子)
+- [路由元信息](#路由元信息)
+- [过渡动效](#过渡动效)
+- [数据获取](#数据获取)
+- [滚动行为](#滚动行为)
+- [路由懒加载](#路由懒加载)
 ## 实例
 ``` js
 
@@ -105,11 +110,10 @@ const router = new VueRouter({
 const User = {
   template: '...',
   watch: {
-    //to : current router message
-    //{name: "index", meta: {}, path: "/index", hash: "", query: {}, …}
-    //from : old router message
-    //{name: "login", meta: {}, path: "/", hash: "", query: {}, …}
     '$route' (to, from) {
+      //to : current router message  {name: "index", meta: {}, path: "/index", hash: "", query: {}, …}
+      //from : old router message  {name: "login", meta: {}, path: "/", hash: "", query: {}, …}
+
       // 对路由变化作出响应...
     }
   }
@@ -614,3 +618,346 @@ const Foo = {
   }
 }
 ```
+## 路由元信息
+```js
+// 配置 meta 字段
+const router = new VueRouter({
+  routes: [
+    {
+      path: '/foo',
+      component: Foo,
+      children: [
+        {
+          path: 'bar',
+          component: Bar,
+          // a meta field
+          meta: { requiresAuth: true }
+        }
+      ]
+    }
+  ]
+})
+```
+
+```js
+//全局导航钩子中检查 meta 字段
+router.beforeEach((to, from, next) => {
+  if (to.matched.some(record => record.meta.requiresAuth)) {
+    // this route requires auth, check if logged in
+    // if not, redirect to login page.
+    if (!auth.loggedIn()) {
+      next({
+        path: '/login',
+        query: { redirect: to.fullPath }
+      })
+    } else {
+      next()
+    }
+  } else {
+    next() // 确保一定要调用 next()
+  }
+})
+```
+
+## 过渡动效
+官方完整例子：
+```js
+mport Vue from 'vue'
+import VueRouter from 'vue-router'
+
+Vue.use(VueRouter)
+
+const Home = {
+  template: `
+    <div class="home">
+      <h2>Home</h2>
+      <p>hello</p>
+    </div>
+  `
+}
+
+const Parent = {
+  data () {
+    return {
+      transitionName: 'slide-left'
+    }
+  },
+  // dynamically set transition based on route change
+  watch: {
+    '$route' (to, from) {
+      const toDepth = to.path.split('/').length
+      const fromDepth = from.path.split('/').length
+      this.transitionName = toDepth < fromDepth ? 'slide-right' : 'slide-left'
+    }
+  },
+  template: `
+    <div class="parent">
+      <h2>Parent</h2>
+      <transition :name="transitionName">
+        <router-view class="child-view"></router-view>
+      </transition>
+    </div>
+  `
+}
+
+const Default = { template: '<div class="default">default</div>' }
+const Foo = { template: '<div class="foo">foo</div>' }
+const Bar = { template: '<div class="bar">bar</div>' }
+
+const router = new VueRouter({
+  mode: 'history',
+  base: __dirname,
+  routes: [
+    { path: '/', component: Home },
+    { path: '/parent', component: Parent,
+      children: [
+        { path: '', component: Default },
+        { path: 'foo', component: Foo },
+        { path: 'bar', component: Bar }
+      ]
+    }
+  ]
+})
+
+new Vue({
+  router,
+  template: `
+    <div id="app">
+      <h1>Transitions</h1>
+      <ul>
+        <li><router-link to="/">/</router-link></li>
+        <li><router-link to="/parent">/parent</router-link></li>
+        <li><router-link to="/parent/foo">/parent/foo</router-link></li>
+        <li><router-link to="/parent/bar">/parent/bar</router-link></li>
+      </ul>
+      <transition name="fade" mode="out-in">
+        <router-view class="view"></router-view>
+      </transition>
+    </div>
+  `
+}).$mount('#app')
+```
+
+
+## 数据获取
+### 导航完成后获取数据
+```js
+<template>
+  <div class="post">
+    <div class="loading" v-if="loading">
+      Loading...
+    </div>
+
+    <div v-if="error" class="error">
+
+    </div>
+
+    <div v-if="post" class="content">
+      <h2></h2>
+      <p></p>
+    </div>
+  </div>
+</template>
+export default {
+  data () {
+    return {
+      loading: false,
+      post: null,
+      error: null
+    }
+  },
+  created () {
+    // 组件创建完后获取数据，
+    // 此时 data 已经被 observed 了
+    this.fetchData()
+  },
+  watch: {
+    // 如果路由有变化，会再次执行该方法
+    '$route': 'fetchData'
+  },
+  methods: {
+    fetchData () {
+      this.error = this.post = null
+      this.loading = true
+      // replace getPost with your data fetching util / API wrapper
+      getPost(this.$route.params.id, (err, post) => {
+        this.loading = false
+        if (err) {
+          this.error = err.toString()
+        } else {
+          this.post = post
+        }
+      })
+    }
+  }
+}
+```
+
+### 在导航完成前获取数据
+```js
+export default {
+  data () {
+    return {
+      post: null,
+      error: null
+    }
+  },
+  beforeRouteEnter (to, from, next) {
+    getPost(to.params.id, (err, post) => 
+      if (err) {
+        // display some global error message
+        next(false)
+      } else {
+        next(vm => {
+          vm.post = post
+        })
+      }
+    })
+  },
+  // 路由改变前，组件就已经渲染完了
+  // 逻辑稍稍不同
+  watch: {
+    $route () {
+      this.post = null
+      getPost(this.$route.params.id, (err, post) => {
+        if (err) {
+          this.error = err.toString()
+        } else {
+          this.post = post
+        }
+      })
+    }
+  }
+}
+```
+
+## 滚动行为
+注意: 这个功能只在 HTML5 history 模式下可用
+当创建一个 Router 实例，你可以提供一个 scrollBehavior 方法：   
+``` js
+const router = new VueRouter({
+  routes: [...],
+  scrollBehavior (to, from, savedPosition) {
+    if (savedPosition) {
+      return savedPosition // 模拟浏览器 后退 或 前进 后页面浏览器所save的位置
+    } else {
+      return { x: 0, y: 0 } // return 期望滚动到哪个的位置   { x: number, y: number }  or { selector: string }
+    }
+  }
+})
+```
+配合[路由元信息](#路由元信息)官网完整例子：
+```js
+import Vue from 'vue'
+import VueRouter from 'vue-router'
+
+Vue.use(VueRouter)
+
+const Home = { template: '<div>home</div>' }
+const Foo = { template: '<div>foo</div>' }
+const Bar = {
+  template: `
+    <div>
+      bar
+      <div style="height:500px"></div>
+      <p id="anchor">Anchor</p>
+    </div>
+  `
+}
+
+// scrollBehavior:
+// - only available in html5 history mode
+// - defaults to no scroll behavior
+// - return false to prevent scroll
+const scrollBehavior = (to, from, savedPosition) => {
+  if (savedPosition) {
+    // savedPosition is only available for popstate navigations.
+    return savedPosition
+  } else {
+    const position = {}
+    // new navigation.
+    // scroll to anchor by returning the selector
+    if (to.hash) {
+      position.selector = to.hash
+    }
+    // check if any matched route config has meta that requires scrolling to top
+    if (to.matched.some(m => m.meta.scrollToTop)) {
+      // cords will be used if no selector is provided,
+      // or if the selector didn't match any element.
+      position.x = 0
+      position.y = 0
+    }
+    // if the returned position is falsy or an empty object,
+    // will retain current scroll position.
+    return position
+  }
+}
+
+const router = new VueRouter({
+  mode: 'history',
+  base: __dirname,
+  scrollBehavior,
+  routes: [
+    { path: '/', component: Home, meta: { scrollToTop: true }},
+    { path: '/foo', component: Foo },
+    { path: '/bar', component: Bar, meta: { scrollToTop: true }}
+  ]
+})
+
+new Vue({
+  router,
+  template: `
+    <div id="app">
+      <h1>Scroll Behavior</h1>
+      <ul>
+        <li><router-link to="/">/</router-link></li>
+        <li><router-link to="/foo">/foo</router-link></li>
+        <li><router-link to="/bar">/bar</router-link></li>
+        <li><router-link to="/bar#anchor">/bar#anchor</router-link></li>
+      </ul>
+      <router-view class="view"></router-view>
+    </div>
+  `
+}).$mount('#app')
+```
+
+## 路由懒加载
+当打包构建应用时，Javascript 包会变得非常大，影响页面加载。如果我们能把不同路由对应的组件分割成不同的代码块，然后当路由被访问的时候才加载对应组件，这样就更加高效了。  
+
+结合 Vue 的 异步组件 和 Webpack 的 code splitting feature, 轻松实现路由组件的懒加载。  
+
+我们要做的就是把路由对应的组件定义成异步组件：  
+```js
+const Foo = resolve => {
+  // require.ensure 是 Webpack 的特殊语法，用来设置 code-split point
+  // （代码分块）
+  require.ensure(['./Foo.vue'], () => {
+    resolve(require('./Foo.vue'))
+  })
+}
+```
+这里还有另一种代码分块的语法，使用 AMD 风格的 require，于是就更简单了： 
+```js
+const Foo = resolve => require(['./Foo.vue'], resolve)
+```
+
+不需要改变任何路由配置，跟之前一样使用 Foo：
+
+```js
+const router = new VueRouter({
+  routes: [
+    { path: '/foo', component: Foo }
+  ]
+})
+```
+
+### 把组件按组分块
+
+有时候我们想把某个路由下的所有组件都打包在同个异步 chunk 中。只需要 给 chunk 命名，提供 require.ensure 第三个参数作为 chunk 的名称:
+```js
+const Foo = r => require.ensure([], () => r(require('./Foo.vue')), 'group-foo')
+const Bar = r => require.ensure([], () => r(require('./Bar.vue')), 'group-foo')
+const Baz = r => require.ensure([], () => r(require('./Baz.vue')), 'group-foo')
+```
+
+Webpack 将相同 chunk 下的所有异步模块打包到一个异步块里面 —— 这也意味着我们无须明确列出 require.ensure 的依赖（传空数组就行）。
